@@ -1,10 +1,23 @@
 `timescale 1ns / 1ps
+`include <define.v>
 
 module mips(
     input clk,
-    input reset
-    );
+    input reset,
+    input [31:0] i_inst_rdata,
+    input [31:0] m_data_rdata,
+    output [31:0] i_inst_addr,
+    output [31:0] m_data_addr,
+    output [31:0] m_data_wdata,
+    output [3 :0] m_data_byteen,
+    output [31:0] m_inst_addr,
+    output w_grf_we,
+    output [4:0] w_grf_addr,
+    output [31:0] w_grf_wdata,
+    output [31:0] w_inst_addr
+);
 ///////////////////////////声明wire区/////////////////////////////
+
 wire [31:0]F_pc,D_pc,E_pc,M_pc,W_pc;
 wire [31:0]F_instr,D_instr,E_instr,M_instr,W_instr;
 wire [31:0]D_npc;
@@ -31,19 +44,40 @@ wire [2:0] D_EXTOp;
 wire D_b_judge,E_b_judge,M_b_judge,W_b_judge;
 wire [2:0] D_CMPOp,D_NPCOp;
 wire [15:0] D_imm16;
+wire D_isMDFT;
 
+wire [3:0] E_ALUOp;
+wire [2:0] E_ALU_A_Sel,E_ALU_B_Sel;
+wire [31:0] E_ALU_A;
+wire [31:0] E_ALU_B;
+wire [31:0] E_MD_HI,E_MD_LO;
+wire E_MD_start,E_MD_busy;
+wire [3:0] E_MDOp;
 
-wire [2:0] E_ALUOp,E_ALU_B_Sel;
 
 wire M_MemWrite;
-wire [2:0] M_DMOp;
+wire [2:0] M_BEOp,M_DEOp;
 
-
+wire [31:0] E_MD_out,M_MD_out,W_MD_out;
 wire [31:0] D_Grs,D_Grt,E_Grs,E_Grt,M_Grt;
 wire [31:0] E_out,M_out,W_out;
 wire [4:0] D_rs,D_rt,E_rs,E_rt,M_rt;
 
+////////////////////////////////////连线区//////////////////////////////////
 
+assign i_inst_addr = F_pc;
+assign F_instr = i_inst_rdata;
+
+
+assign m_inst_addr = M_pc;
+assign m_data_addr = M_ALU_result;
+
+
+
+assign w_grf_we = W_RegWrite;
+assign w_grf_addr = W_A3;
+assign w_grf_wdata = W_out;
+assign w_inst_addr = W_pc;
 
 
 
@@ -55,11 +89,6 @@ PC F_PC(
 	.en(!stall),
 	.npc(D_npc),
 	.pc(F_pc)
-);
-
-IM F_IM(
-	.pc(F_pc),
-	.instr(F_instr)	
 );
 
 FD_Reg FD_reg(
@@ -84,6 +113,7 @@ ctrl D_ctrl(
 	.CMPOp(D_CMPOp),
 	.EXTOp(D_EXTOp),
 	.NPCOp(D_NPCOp),
+	.isMDFT(D_isMDFT),
 	.RegWrite(D_RegWrite),
 	.D_Tuse_rs(D_Tuse_rs),
 	.D_Tuse_rt(D_Tuse_rt)
@@ -155,35 +185,52 @@ ctrl E_ctrl(
 	.rs(E_rs),
 	.rt(E_rt),
 	.ALUOp(E_ALUOp),
+	.MDOp(E_MDOp),
+	.MD_start(E_MD_start),
 	.GRF_WD_Sel(E_GRF_WD_Sel),
 	.GRF_A3(E_A3),
+	.ALU_A_Sel(E_ALU_A_Sel),
 	.ALU_B_Sel(E_ALU_B_Sel),
 	.E_Tnew(E_Tnew),
 	.RegWrite(E_RegWrite)
 );
 
 
-wire [31:0] E_ALU_B;
-MUX_8_32 E_MUX_ALU_B(
-	.Op(E_ALU_B_Sel),
-	.data1(E_Fw_Grt),
-	.data2(E_imm32),
-	.out(E_ALU_B)
+MD E_MD(
+	.clk(clk),
+	.reset(reset),
+	.start(E_MD_start),
+	.MDOp(E_MDOp),
+	.A(E_Fw_Grs),
+	.B(E_Fw_Grt),
+	.HI(E_MD_HI),
+	.LO(E_MD_LO),
+	.out(E_MD_out),
+	.busy(E_MD_busy)
 );
 
+
+assign E_ALU_B = (E_ALU_B_Sel == `ALU_B_imm32)?E_imm32:
+					(E_ALU_B_Sel == `ALU_B_shamt)?{{27{1'b0}},E_instr[10:6]}:
+					(E_ALU_B_Sel == `ALU_B_Grs)?E_Fw_Grs:
+					(E_ALU_B_Sel == `ALU_B_Grt)?E_Fw_Grt:
+					E_Fw_Grt;
+					
+assign E_ALU_A = (E_ALU_A_Sel == `ALU_A_Grt)?E_Fw_Grt:
+						(E_ALU_A_Sel == `ALU_A_Grs)?E_Fw_Grs:
+						E_Fw_Grs;
+
 ALU E_ALU(
-	.A(E_Fw_Grs),
+	.A(E_ALU_A),
 	.B(E_ALU_B),
 	.ALUOp(E_ALUOp),
 	.ALUresult(E_ALU_result)
 );
 
-MUX_8_32 Eout(
-	.Op(E_GRF_WD_Sel),
-	.data1(E_pc + 8),
-	.data4(E_imm32),
-	.out(E_out)
-);
+
+assign E_out = (E_GRF_WD_Sel == `Reg_pcplus8)?(E_pc+8):
+					(E_GRF_WD_Sel == `Reg_lui)?(E_imm32):
+					32'b0;
 
 EM_Reg EM_Reg(
 	.clk(clk),
@@ -196,19 +243,22 @@ EM_Reg EM_Reg(
 	.E_imm32(E_imm32),
 	.E_ALU_result(E_ALU_result),
 	.E_b_judge(E_b_judge),
+	.E_MD_out(E_MD_out),
 	.M_pc(M_pc),
 	.M_instr(M_instr),
 	.M_Grt(M_Grt),
 	.M_imm32(M_imm32),
 	.M_ALU_result(M_ALU_result),
-	.M_b_judge(M_b_judge)
+	.M_b_judge(M_b_judge),
+	.M_MD_out(M_MD_out)
 );
 
 //////////////////MMMMMMMMMMMMMMMMMMMMMMMMMMMMM////////////////////
 ctrl M_ctrl(
 	.instr(M_instr),
 	.rt(M_rt),
-	.DMOp(M_DMOp),
+	.BEOp(M_BEOp),
+	.DEOp(M_DEOp),
 	.MemWrite(M_MemWrite),
 	.GRF_A3(M_A3),
 	.GRF_WD_Sel(M_GRF_WD_Sel),
@@ -216,26 +266,26 @@ ctrl M_ctrl(
 	.RegWrite(M_RegWrite)
 );
 
-
-DM M_DM(
-	.pc(M_pc),
-	.clk(clk),
-	.reset(reset),
-	.MemWrite(M_MemWrite),
+BE M_BE(
 	.MemAddr(M_ALU_result),
 	.din(M_Fw_Grt),
-	.dout(M_DM_RD),
-	.DMOp(M_DMOp)
-
+	.BEOp(M_BEOp),
+	.m_data_wdata(m_data_wdata),
+	.m_data_byteen(m_data_byteen)
 );
 
-MUX_8_32 Mout(
-	.Op(M_GRF_WD_Sel),
-	.data1(M_pc + 8),
-	.data3(M_ALU_result),
-	.data4(M_imm32),
-	.out(M_out)
+DE M_DE(
+	.MemAddr(M_ALU_result),
+	.din(m_data_rdata),
+	.DEOp(M_DEOp),
+	.dout(M_DM_RD)
 );
+
+assign M_out = (M_GRF_WD_Sel == `Reg_pcplus8)?(M_pc+8):
+					(M_GRF_WD_Sel == `Reg_ALUresult)?(M_ALU_result):
+					(M_GRF_WD_Sel == `Reg_md)?(M_MD_out):	
+					(M_GRF_WD_Sel == `Reg_lui)?(M_imm32):
+					32'b0;
 
 MW_Reg MW_Reg(
 	.clk(clk),
@@ -248,12 +298,14 @@ MW_Reg MW_Reg(
 	.M_ALU_result(M_ALU_result),
 	.M_DM_RD(M_DM_RD),
 	.M_b_judge(M_b_judge),
+	.M_MD_out(M_MD_out),
 	.W_pc(W_pc),
 	.W_instr(W_instr),
 	.W_imm32(W_imm32),
 	.W_ALU_result(W_ALU_result),
 	.W_DM_RD(W_DM_RD),
-	.W_b_judge(W_b_judge)
+	.W_b_judge(W_b_judge),
+	.W_MD_out(W_MD_out)
 );
 ////////////////WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW/////////////////////////////
 
@@ -265,16 +317,13 @@ ctrl W_ctrl(
 	.RegWrite(W_RegWrite)
 );
 
-MUX_8_32 Wout(
-	.Op(W_GRF_WD_Sel),
-	.data1(W_pc + 8),
-	.data2(W_DM_RD),
-	.data3(W_ALU_result),
-	.data4(W_imm32),
-	.out(W_out)
-);
 
-
+assign W_out = (W_GRF_WD_Sel == `Reg_pcplus8)?(W_pc+8):
+					(W_GRF_WD_Sel == `Reg_dmrd)?(W_DM_RD):
+					(W_GRF_WD_Sel == `Reg_ALUresult)?(W_ALU_result):
+					(W_GRF_WD_Sel == `Reg_lui)?(W_imm32):
+					(W_GRF_WD_Sel == `Reg_md)?(W_MD_out):	
+					32'b0;
 
 
 ////////////////////////////hazard////////////////////////////////////
@@ -307,6 +356,12 @@ Harzad harzad(
 .M_out(M_out),
 .W_out(W_out),
 
+	 
+.D_isMDFT(D_isMDFT),
+.E_MD_busy(E_MD_busy),
+.E_MD_start(E_MD_start),
+
+
 .E_RegWrite(E_RegWrite),
 .M_RegWrite(M_RegWrite),
 .W_RegWrite(W_RegWrite),
@@ -320,13 +375,5 @@ Harzad harzad(
 .stall(stall)
 
 );
-
-
-
-
-
-
-
-
 
 endmodule

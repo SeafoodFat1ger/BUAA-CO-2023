@@ -3,7 +3,7 @@
 module ALU(
     input [31:0] A,
     input [31:0] B,
-    input [2:0] ALUOp,
+    input [3:0] ALUOp,
     output reg [31:0] ALUresult
     );
 always@(*)begin
@@ -14,12 +14,25 @@ always@(*)begin
 		`ALU_sub:begin
 			ALUresult = A - B;
 		end
-		`ALU_ori:begin
+		`ALU_or:begin
 			ALUresult = A | B;
 		end
 		`ALU_lui:begin
 			ALUresult = B;
 		end
+		`ALU_and:begin
+			ALUresult = A & B;
+		end
+		`ALU_slt:begin
+			ALUresult = $signed(A) < $signed(B);
+		end
+		`ALU_sltu:begin
+			ALUresult = A < B;
+		end
+		`ALU_left:begin
+			ALUresult = A << B;		//$signed($signed(A) >>> $signed(B)) À„ ˝”““∆
+		end		
+		
 	endcase
 end
 endmodule

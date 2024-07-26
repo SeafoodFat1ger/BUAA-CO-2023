@@ -11,6 +11,8 @@ module MW_Reg(
 
     input [31:0] M_DM_RD,
     input [31:0] M_ALU_result,
+	 input [31:0] M_MD_out,
+	 
 	 input M_b_judge,
 	 output reg W_b_judge,
 	 
@@ -18,7 +20,8 @@ module MW_Reg(
     output reg [31:0] W_instr,
     output reg [31:0] W_DM_RD,
     output reg [31:0] W_ALU_result,
-    output reg [31:0] W_imm32
+    output reg [31:0] W_imm32,
+	 output reg [31:0] W_MD_out
     );
 always@(posedge clk)begin
 	if((reset == 1'b1)||(clear == 1'b1))begin
@@ -28,6 +31,7 @@ always@(posedge clk)begin
 		W_ALU_result <= 0;
 		W_imm32<= 0;
 		W_b_judge<= 0;
+		W_MD_out <= 0;
 	end
 	else if(en == 1'b1)begin
 		W_pc <= M_pc;
@@ -36,6 +40,7 @@ always@(posedge clk)begin
 		W_ALU_result <= M_ALU_result;
 		W_imm32 <= M_imm32;
 		W_b_judge <= M_b_judge;
+		W_MD_out <= M_MD_out;
 	end
 end
 

@@ -33,7 +33,6 @@ always @(posedge clk)begin
 			  end
 			  else begin
 					grf[A3] <= WD;
-					$display("%d@%h: $%d <= %h", $time,pc, A3, WD);
 			  end
         end
     end

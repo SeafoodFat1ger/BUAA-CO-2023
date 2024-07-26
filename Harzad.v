@@ -1,23 +1,5 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    20:03:12 11/08/2023 
-// Design Name: 
-// Module Name:    Harzad 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+
 module Harzad(
     input [31:0] D_Grs,
     input [31:0] D_Grt,
@@ -52,6 +34,13 @@ module Harzad(
 	 input M_RegWrite,
 	 input W_RegWrite,
 	 
+	 
+	 input D_isMDFT,
+	 input E_MD_busy,
+	 input E_MD_start,
+	 
+	 
+	 
     output [31:0] D_Fw_Grs,
     output [31:0] D_Fw_Grt,
     output [31:0] E_Fw_Grs,
@@ -66,7 +55,11 @@ wire Stall_rs_E = (D_Tuse_rs < E_Tnew) && (D_rs == E_A3) && (D_rs != 5'd0)&&(E_R
 wire Stall_rs_M = (D_Tuse_rs < M_Tnew) && (D_rs == M_A3) && (D_rs != 5'd0)&&(M_RegWrite == 1'b1);
 wire Stall_rt_E = (D_Tuse_rt < E_Tnew) && (D_rt == E_A3) && (D_rt != 5'd0)&&(E_RegWrite == 1'b1);
 wire Stall_rt_M = (D_Tuse_rt < M_Tnew) && (D_rt == M_A3) && (D_rt != 5'd0)&&(M_RegWrite == 1'b1);
-assign stall = Stall_rs_E | Stall_rs_M | Stall_rt_E | Stall_rt_M;
+
+wire Stall_MD_E = (D_isMDFT && (E_MD_start || E_MD_busy));
+
+
+assign stall = Stall_MD_E||Stall_rs_E | Stall_rs_M | Stall_rt_E | Stall_rt_M;
 
 
 
